@@ -1,0 +1,248 @@
+/******************************************************************************
+
+                            Online C Compiler.
+                Code, Compile, Run and Debug C program online.
+Write your code in this editor and press "Run" button to compile and execute it.
+
+*******************************************************************************/
+
+#include <stdio.h>
+
+void print_bits(void* p, size_t skip_count, size_t print_count)
+{
+    for(size_t i = 0; i < skip_count+print_count; ++i)
+    {
+        if(i < skip_count)
+            continue;
+        printf("%d", (((unsigned char*)p)[(i/8)] >> (i%8) &1));
+    }
+}
+
+char* _bracket_end(char* start)
+{
+    char* c = start + 1;
+    int count = 1;
+    
+    for(; *c != '\0'; ++c)
+    {
+        count += (*c == '[') - (*c == ']');
+        if(count == 0)
+            return c;
+    }
+    
+    printf("bracket without a pair: %s\n", start);
+    return c;
+}
+
+int _printf_bits(void* p, char* pattern, size_t index)
+{
+    int number = 0;
+    int escape_flag = 0;
+    
+    for(char* c = pattern; ; ++c)
+    {
+        
+        if(escape_flag)
+        {
+            print_bits(p, index, number);
+            index += number;
+            number = 0;
+            
+            printf("%c", *c);
+            escape_flag = 0;
+        }
+        
+        if('0' <= *c && *c <= '9')
+        {
+            number = number*10 + (*c-'0');
+            continue;
+        }
+        
+        if(*c == ' ')
+        {
+            print_bits(p, index, number);
+            index += number;
+            number = 0;
+            continue;
+        }
+        
+        if(*c == '/')
+        {
+            escape_flag = 1;
+            continue;
+        }
+        
+        if(*c == '[')
+        {
+            if(number == 0)
+                number = 1;
+            for(; number > 0; --number)
+            {
+                index = _printf_bits(p, c+1, index);
+            }
+            
+            c = _bracket_end(c);
+            
+            continue;
+        }
+        
+        if(*c == '>')
+        {
+            index += number;
+            number = 0;
+            continue;
+        }
+        
+        print_bits(p, index, number);
+        index += number;
+        number = 0;
+        
+        if(*c == '\0' || *c == ']')
+            return index;
+        
+        printf("%c", *c);
+    } 
+}
+
+size_t bit_count_from_pattern(char* pattern)
+{
+    size_t sum = 0;
+    size_t number = 0;
+    int escape_flag = 0;
+    
+    for(char* c = pattern; ; ++c)
+    {
+        if(escape_flag)
+        {
+            escape_flag = 0;
+            sum += number;
+            number = 0;
+            continue;
+        }
+        
+        if('0' <= *c && *c <= '9')
+        {
+            number = number*10 + *c - '0';
+            continue;
+        }
+        
+        if(*c == '/')
+        {
+            escape_flag = 1;
+            continue;
+        }
+        
+        if(*c == '[')
+        {
+            if(number == 0)
+                number = 1;
+            for(; number > 0; --number)
+                sum += bit_count_from_pattern(c+1);
+            
+            c = _bracket_end(c);
+            continue;
+        }
+        
+        sum += number;
+        number = 0;
+        
+        if(*c == '\0' || *c == ']')
+            return sum;
+    }
+}
+
+void printf_bits(void*p, char* pattern)
+{
+    size_t byte_count = bit_count_from_pattern(pattern);
+    byte_count = byte_count/8 + (byte_count % 8 != 0);
+    
+    unsigned char buf[byte_count];
+    for(size_t i = 0; i < byte_count; ++i)
+    {
+        buf[i] = 0;
+        for(int j = 0; j < 8; ++j)
+        {
+            buf[i] |= (((unsigned char*)p)[byte_count-i-1] >> (7-j) & 1) << j;
+        }
+    }
+    
+    _printf_bits(&buf, pattern, 0);
+}
+
+// *********
+
+void print_data_for_screenshots()
+{
+    printf("Целые числа:\n");
+    char inum = 0;
+    for(int i = 1; inum >= 0; inum += i, i *= 2)
+    {
+        printf("%+9hhd | %+9hhd\n", inum, -inum);
+        printf_bits(&inum, "1/ 7");
+        printf(" | ");
+        inum = -inum;
+        printf_bits(&inum, "1/ 7\n");
+        inum = -inum;
+    }
+    
+    printf("\n\n\n");
+    
+    printf("Мантисса дробных чисел:\n");
+    float fnum = 0.0;
+    for(int i = 1; i <= 256; fnum += i, i *= 2)
+    {
+        printf("%+18f | %+18f\n", fnum, -fnum);
+        printf_bits(&fnum, "1/ 8/ 7 2[8>]");
+        printf(" | ");
+        fnum = -fnum;
+        printf_bits(&fnum, "1/ 8/ 7 2[8>]\n");
+        fnum = -fnum;
+    }
+    
+    printf("\n\n\n");
+    
+    printf("Порядок дробных чисел:\n");
+    fnum = 1.0;
+    for(int i = 1; i <= 256; i *= 2)
+    {
+        fnum = 1.0*i;
+        printf("%+18f | %+18f\n", fnum, 1/fnum);
+        printf_bits(&fnum, "1/ 8/ 7 2[8>]");
+        printf(" | ");
+        fnum = 1/fnum;
+        printf_bits(&fnum, "1/ 8/ 7 2[8>]\n");
+    }
+}
+
+#define copypaste(type, name, scanf_format, bit_format) \
+    type name;\
+    printf("\n" #type " (");\
+    printf("%ld", sizeof(type));\
+    printf(" byte) = ");\
+    scanf(scanf_format, &name);\
+    printf("bits: ");\
+    printf_bits(&name, bit_format);
+
+void interact_with_human()
+{
+    copypaste(signed char, s_char, "%hhd", "1/ 7\n")
+    copypaste(signed short, s_short, "%hd", "1/ 7.8\n")
+    copypaste(signed int, s_int, "%d", "1/ 7 3[.8]\n")
+    
+    copypaste(unsigned char, u_char, "%hhu", "8\n")
+    copypaste(unsigned short, u_short, "%hu", "8.8\n")
+    copypaste(unsigned int, u_int, "%u", "8.8.8.8\n")
+    
+    copypaste(float, v_float, "%f", "1/ 8/ 7 2[.8]\n")
+    copypaste(double, v_double, "%lf", "1/ 11/ 4 6[.8]\n")
+    
+    return;
+}
+
+
+int main()
+{
+    // print_data_for_screenshots();
+    interact_with_human();
+    return 0;
+}
